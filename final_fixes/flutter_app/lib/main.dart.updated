@@ -1,0 +1,144 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:provider/provider.dart';
+
+import 'services/call_notification_service.dart';
+import 'services/call_service.dart';
+import 'screens/call_history_screen.dart';
+
+// استقبال الإشعارات عندما يكون التطبيق مغلقاً
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  
+  // معالجة إشعارات المكالمات في الخلفية
+  final data = message.data;
+  if (data['type'] == 'incoming_call') {
+    // لا يمكن عرض واجهة المكالمة الواردة عندما يكون التطبيق مغلقاً
+    // لكن يمكن عرض إشعار محلي
+    final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+        FlutterLocalNotificationsPlugin();
+        
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+      'call_channel',
+      'المكالمات',
+      channelDescription: 'إشعارات المكالمات الصوتية',
+      importance: Importance.max,
+      priority: Priority.high,
+      fullScreenIntent: true,
+    );
+    
+    const NotificationDetails platformChannelSpecifics =
+        NotificationDetails(android: androidPlatformChannelSpecifics);
+        
+    await flutterLocalNotificationsPlugin.show(
+      1000,
+      'مكالمة واردة',
+      'من ${data['callerName']}',
+      platformChannelSpecifics,
+    );
+  }
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // تهيئة Firebase
+  await Firebase.initializeApp();
+  
+  // تسجيل معالج الإشعارات في الخلفية
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  
+  runApp(const MyApp());
+}
+
+class MyApp extends StatefulWidget {
+  const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final CallNotificationService _callNotificationService = CallNotificationService();
+  final CallService _callService = CallService();
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeApp();
+  }
+
+  // تهيئة التطبيق
+  Future<void> _initializeApp() async {
+    // تهيئة خدمة المكالمات
+    await _callService.initialize();
+    
+    // تهيئة خدمة الإشعارات بعد بناء الواجهة
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _callNotificationService.initialize(_navigatorKey.currentContext!);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        // إضافة مزودي الحالة هنا
+      ],
+      child: MaterialApp(
+        title: 'فريق الأنصار',
+        navigatorKey: _navigatorKey,
+        theme: ThemeData(
+          primarySwatch: Colors.blue,
+          fontFamily: 'Cairo',
+          useMaterial3: true,
+        ),
+        // تعريف الطرق
+        routes: {
+          '/call-history': (context) => const CallHistoryScreen(),
+          // إضافة المزيد من الطرق هنا
+        },
+        // الشاشة الرئيسية
+        home: const HomeScreen(),
+      ),
+    );
+  }
+}
+
+// شاشة وهمية للعرض
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('فريق الأنصار'),
+        centerTitle: true,
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'تم تنفيذ ميزة المكالمات الصوتية',
+              style: TextStyle(fontSize: 18),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pushNamed(context, '/call-history');
+              },
+              child: const Text('عرض سجل المكالمات'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
